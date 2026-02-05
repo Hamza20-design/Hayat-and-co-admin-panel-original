@@ -152,6 +152,21 @@
             border-left: 4px solid var(--gold);
         }
 
+        /* Multi-Image Preview Style */
+        #preview-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        .preview-box {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border: 1px solid var(--gold);
+            border-radius: 4px;
+        }
+
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -229,8 +244,11 @@
                             <option value="Most Popular">Most Popular</option>
                         </select>
                     </div>
-                    <input type="text" id="f-img" placeholder="Image URL">
-                    <button class="btn-gold" onclick="createNewWatch()">PUBLISH TO WEBSITE</button>
+                    <label style="font-size: 0.8rem; color: var(--gold); margin-bottom: 5px; display: block;">Select Watch Images (Upload Multiple):</label>
+                    <div id="preview-container"></div>
+                    <input type="file" id="f-file" accept="image/*" multiple onchange="handleFileSelect(this)">
+                    
+                    <button class="btn-gold" id="btn-publish" onclick="createNewWatch()">PUBLISH TO WEBSITE</button>
                 </div>
                 <div class="grid" id="inventory-grid"></div>
             </section>
@@ -241,6 +259,7 @@
         const DATABASE_URL = "https://hayatwatches-e7bd1-default-rtdb.firebaseio.com/";
         const LOGIN_EMAIL = "hayat@gmail.com";
         const LOGIN_PASS = "hayatandco123";
+        let currentBase64Images = [];
 
         function attemptLogin() {
             const e = document.getElementById('email').value;
@@ -252,6 +271,28 @@
                 loadInventory();
             } else {
                 document.getElementById('login-err').innerText = "Access Denied.";
+            }
+        }
+
+        // Logic to handle multiple local image files and convert to Base64
+        function handleFileSelect(input) {
+            const files = input.files;
+            const previewContainer = document.getElementById('preview-container');
+            previewContainer.innerHTML = "";
+            currentBase64Images = [];
+
+            if (files) {
+                Array.from(files).forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        currentBase64Images.push(e.target.result);
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = "preview-box";
+                        previewContainer.appendChild(img);
+                    }
+                    reader.readAsDataURL(file);
+                });
             }
         }
 
@@ -313,23 +354,20 @@
             const brand = document.getElementById('f-brand').value;
             const name = document.getElementById('f-name').value;
             const price = document.getElementById('f-price').value;
-            const img = document.getElementById('f-img').value;
             const selection = document.getElementById('f-stock').value;
+            const btn = document.getElementById('btn-publish');
             
-            // Fixed explicit logic to prevent everything defaulting to popular
             let type = "stock"; 
-            if(selection === "Pre-Order") {
-                type = "preorder";
-            } else if(selection === "Most Popular") {
-                type = "popular";
-            } else {
-                type = "stock";
-            }
+            if(selection === "Pre-Order") type = "preorder";
+            else if(selection === "Most Popular") type = "popular";
 
-            if(brand && name && price) {
+            if(brand && name && price && currentBase64Images.length > 0) {
+                btn.innerText = "UPLOADING...";
+                btn.disabled = true;
+
                 fetch(`${DATABASE_URL}/watches.json`, { 
                     method: 'POST', 
-                    body: JSON.stringify({ brand, name, price, type, img }) 
+                    body: JSON.stringify({ brand, name, price, type, images: currentBase64Images }) 
                 })
                 .then(() => { 
                     alert("Published Successfully!"); 
@@ -338,11 +376,15 @@
                     document.getElementById('f-brand').value = '';
                     document.getElementById('f-name').value = '';
                     document.getElementById('f-price').value = '';
-                    document.getElementById('f-img').value = '';
+                    document.getElementById('f-file').value = '';
+                    document.getElementById('preview-container').innerHTML = '';
+                    currentBase64Images = [];
                     document.getElementById('f-stock').selectedIndex = 0;
+                    btn.innerText = "PUBLISH TO WEBSITE";
+                    btn.disabled = false;
                 });
             } else {
-                alert("Please fill in Brand, Name, and Price.");
+                alert("Please fill in Brand, Name, Price, and select at least one Image.");
             }
         }
 
@@ -354,9 +396,12 @@
                 for (let id in data) {
                     const w = data[id];
                     let displayBadge = w.type === 'popular' ? 'Most Popular' : (w.type === 'preorder' ? 'Pre-Order' : 'In Stock');
+                    
+                    // Use the first image from the array as the thumbnail
+                    const thumbImg = (w.images && w.images.length > 0) ? w.images[0] : 'https://via.placeholder.com/400x200';
 
                     iGrid.innerHTML += `<div class="watch-card">
-                        <img src="${w.img}" onerror="this.src='https://via.placeholder.com/400x200'">
+                        <img src="${thumbImg}" onerror="this.src='https://via.placeholder.com/400x200'">
                         <span class="badge">${displayBadge}</span>
                         <h4 style="color:var(--gold);">${w.brand}</h4>
                         <p>${w.name}</p>
